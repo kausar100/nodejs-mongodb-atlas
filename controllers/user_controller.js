@@ -7,6 +7,13 @@ const { generateToken } = require("../config/authenticator");
 
 const getAllUsers = async (req, res) => {
     try {
+        const user = await User.findById(req.jwt_payload.id);
+
+        if (user == null) {
+            return res.status(401).send({
+                message: "unauthorized"
+            });
+        }
         const users = await User.find().select({ __v: 0, password: 0 });
         if (users) {
             res.status(200).send(users);
@@ -28,13 +35,29 @@ const getAllUsers = async (req, res) => {
 
 const getActiveUsers = async (req, res) => {
     try {
-        const users = await User.find({ isActive: true }).select({ __v: 0, password: 0 });
-        if (users) {
-            res.status(200).send(users);
+        const user = await User.findById(req.jwt_payload.id);
+
+        if (user == null) {
+            return res.status(401).send({
+                message: "unauthorized"
+            });
+        }
+
+        if (user.isActive) {
+            const result = await User.find({ isActive: true }).select({ __v: 0, password: 0 });
+            const users = result.filter((p) => p._id != user.id);
+            if (users) {
+                res.status(200).send(users);
+            } else {
+                res.status(204).send({
+                    success: true,
+                    message: "no users found"
+                })
+            }
         } else {
-            res.status(200).send({
+            res.status(204).send({
                 success: true,
-                message: "no users found"
+                message: "you are not active"
             })
         }
 
@@ -63,23 +86,35 @@ const registerUser = async (req, res) => {
                     message: err.message
                 });
             }
+            const lat = req.body.latitude ?? 0.0;
+            const long = req.body.longitude ?? 0.0;
             const newUser = new User({
-                name: req.body.name || "",
+                name: req.body.name,
                 email: req.body.email,
-                phoneNo: req.body.phoneNo || "",
+                phoneNo: req.body.phoneNo,
                 password: hash,
                 isActive: true,
-                latitude: Number(req.body.latitude) || 0.0,
-                longitude: Number(req.body.longitude) || 0.0
+                latitude: Number(lat),
+                longitude: Number(long)
             });
 
-            const user = await newUser.save();
+            const result = await newUser.save();
 
-            res.status(201).send({
-                success: true,
-                id: user._id,
-                message: "user register successfully"
-            });
+            if (result != null) {
+                const user = await User.findById(result._id).select({ password: 0, __v: 0 });
+
+                res.status(201).send({
+                    success: true,
+                    message: "user register successfully",
+                    user
+                });
+            } else {
+                return res.status(401).send({
+                    message: "user registration failed for some reason"
+                });
+
+            }
+
 
         });
 
@@ -113,14 +148,14 @@ const loginUser = async (req, res) => {
                     const payload = {
                         id: found._id,
                         email: found.email
-                    } 
+                    }
                     //need to send token here
                     const token = generateToken(payload);
-                   
+
                     res.status(200).send({
                         success: true,
                         message: "user login successfully",
-                        token: "Bearer "+token
+                        token: "Bearer " + token,
                     });
                 }
             });
@@ -139,31 +174,20 @@ const loginUser = async (req, res) => {
     }
 };
 
-const updateUserLocation = async (req, res) => {
+const userInfo = async (req, res) => {
     try {
-        const found = await User.findById(req.jwt_payload.id);
+        const user = await User.findById(req.jwt_payload.id).select({ password: 0, __v: 0 });
 
-        if (found == null) {
+        if (user == null) {
             return res.status(404).send({
                 message: "user doesn't exist"
             });
         }
 
-        const result = await User.updateOne({ _id: found._id }, { isActive: !found.isActive })
-
-        if (result) {
-            res.status(200).send({
-                success: true,
-                id: result._id,
-                message: "user location updated successfully"
-            });
-        } else {
-            res.status(200).send({
-                success: false,
-                id: found._id,
-                message: "couldn't update location for some reason"
-            });
-        }
+        res.status(200).send({
+            success: true,
+            user
+        });
 
 
     } catch (err) {
@@ -174,4 +198,70 @@ const updateUserLocation = async (req, res) => {
     }
 };
 
-module.exports = { getAllUsers, getActiveUsers, registerUser, loginUser, updateUserLocation }
+const clearDB = async (req, res) => {
+    try {
+        const result = await User.deleteMany();
+
+        console.log(result);
+
+        if (result == null) {
+            return res.status(404).send({
+                message: "user doesn't exist"
+            });
+        }
+
+        res.status(200).send({
+            success: true,
+            'message': "users removed from db successfully"
+        });
+
+
+    } catch (err) {
+        res.status(500).send({
+            success: false,
+            message: err.message
+        })
+    }
+};
+
+const changeActiveStatus
+    = async (req, res) => {
+        try {
+            const found = await User.findById(req.jwt_payload.id);
+
+            if (found == null) {
+                return res.status(404).send({
+                    message: "user doesn't exist"
+                });
+            }
+
+            const result = await User.updateOne({ _id: found._id }, { isActive: !found.isActive })
+
+            if (result != null) {
+                const user = await User.findById(found._id).select({ password: 0, __v: 0 });
+
+                res.status(200).send({
+                    success: true,
+                    message: "user active status updated successfully",
+                    user
+                });
+            } else {
+                return res.status(401).send({
+                    message: "couldn't update active status for some reason"
+                });
+
+            }
+
+        } catch (err) {
+            res.status(500).send({
+                success: false,
+                message: err.message
+            })
+        }
+    };
+
+module.exports = {
+    getAllUsers, getActiveUsers, registerUser, loginUser, userInfo,
+    changeActiveStatus,
+    clearDB
+}

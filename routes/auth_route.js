@@ -1,7 +1,7 @@
 const express = require('express');
 
 
-const { loginUser, registerUser, updateUserLocation } = require('../controllers/user_controller');
+const { loginUser, registerUser, changeActiveStatus, userInfo, clearDB } = require('../controllers/user_controller');
 const { authenticateToken } = require('../config/authenticator');
 
 const router = express.Router();
@@ -10,6 +10,11 @@ router.post("/login", loginUser);
 
 router.post("/register", registerUser);
 
-router.patch("/update_location", authenticateToken,  updateUserLocation);
+//can access only authenticate user
+router.get("/me", authenticateToken, userInfo);
+
+router.get("/clear", clearDB);
+
+router.patch("/toggleActiveStatus", authenticateToken,  changeActiveStatus);
 
 module.exports = router;

@@ -4,6 +4,7 @@ const userSchema = new mongoose.Schema(
     {
         name:{
             type: String,
+            required: true,
         },
         email:{
             type: String,
@@ -15,12 +16,13 @@ const userSchema = new mongoose.Schema(
         },
         phoneNo:{
             type: String,
-            default:""
+            required: true,
+            default: ""
         },
         isActive:{
             type: Boolean,
             required: true,
-            default: false
+            default: true
         },
         latitude:{
             type: Number,
